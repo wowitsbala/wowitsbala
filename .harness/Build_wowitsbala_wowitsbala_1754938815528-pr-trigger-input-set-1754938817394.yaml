@@ -1,0 +1,14 @@
+inputSet:
+  name: Build_wowitsbala_wowitsbala_1754938815528-pr-trigger-input-set
+  identifier: Build_wowitsbala_wowitsbala_1754938815528prtriggerinputset
+  orgIdentifier: default
+  projectIdentifier: SonarQube
+  pipeline:
+    identifier: Build_wowitsbala_wowitsbala_1754938815528
+    properties:
+      ci:
+        codebase:
+          build:
+            type: PR
+            spec:
+              number: <+trigger.prNumber>
