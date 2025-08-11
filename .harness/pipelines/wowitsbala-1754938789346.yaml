@@ -11,25 +11,112 @@ pipeline:
         repoName: wowitsbala/wowitsbala
   stages:
     - stage:
-        identifier: build
-        name: build
+        name: Sonar Scan Stage
+        identifier: Sonar_Scan_Stage
+        description: Stage for running SonarQube code quality analysis
+        type: CI
         spec:
-          caching:
-            enabled: true
           cloneCodebase: true
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Docker
+            spec: {}
           execution:
             steps:
               - step:
-                  identifier: echo
-                  name: echo
-                  spec:
-                    command: echo hello world
-                  timeout: ""
                   type: Run
-          platform:
-            arch: Amd64
-            os: Linux
-          runtime:
-            spec: {}
-            type: Cloud
-        type: CI
+                  name: Install Dependencies
+                  identifier: Install_Dependencies
+                  spec:
+                    shell: Sh
+                    command: |-
+                      echo '=============================================================='
+                      echo '===================INSTALL DEPENDENCIES======================='
+                      echo '=============================================================='
+                      echo ''
+
+                      while sudo fuser /var/lib/dpkg/lock >/dev/null 2>&1; do
+                         echo "Waiting for apt to release the lock..."
+                         sleep 5
+                      done
+
+                      echo '=============================================================='
+                      echo 'STEP 1: Update Package List'
+                      echo '=============================================================='
+                      sudo apt-get update
+
+                      echo '=============================================================='
+                      echo 'STEP 2: Add NodeSource Repository for Node.js 20.x'
+                      echo '=============================================================='
+                      curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+
+                      echo '=============================================================='
+                      echo 'STEP 3: Install Node.js'
+                      echo '=============================================================='
+                      sudo apt-get install -y --allow-downgrades nodejs=20.17.*
+
+                      echo '=============================================================='
+                      echo 'STEP 4: Install npm'
+                      echo '=============================================================='
+                      sudo npm install -g npm@latest
+
+                      echo '=============================================================='
+                      echo 'STEP 5: Display Installed Versions'
+                      echo '=============================================================='
+                      echo "Node.js version:"
+                      node -v
+                      echo "npm version:"
+                      npm -v
+              - step:
+                  type: Sonarqube
+                  name: Run SonarQube Scan
+                  identifier: Run_SonarQube_Scan
+                  spec:
+                    mode: orchestration
+                    config: default
+                    target:
+                      type: repository
+                      workspace: <+codebase.workingDir>
+                      detection: auto
+                    advanced:
+                      log:
+                        level: info
+                      args:
+                        cli: "-Dsonar.sources=src -Dsonar.branch.name=<+pipeline.properties.ci.codebase.build.spec.branch> -Dsonar.tests=src -Dsonar.exclusions=src/**/**.test.js,src/**/__test_data/**,src/server.js,src/**/**.test.tsx,src/**/**test.ts -Dsonar.inclusions=src/** -Dsonar.test.inclusions=src/**/*.test.tsx,src/**/*.test.ts,src/**/*.test.js,src/**/*.test.jsx -Dsonar.coverage.exclusions=src/__test_data/**,testdata/*,src/server.js,src/**/*.test.js,src/**/__test_data/*.json,src/**/*.stories.js,src/**/**/**.test.tsx,src/**/**/**.test.ts -Dsonar.qualitygate=DSP-frontend-QG -Dsonar.profile=DSP-Sonar-JavaScript -Dsonar.core.codeCoveragePlugin=clover -Dsonar.dynamicAnalysis=reuseReports"
+                    auth:
+                      access_token: <+pipeline.variables.sonar>
+                      domain: http://sonar.ulta.com/
+                      ssl: true
+                    tool:
+                      project_key: ubm-ubmedia-audience-frontend
+            enabled: true
+            paths: []
+        delegateSelectors:
+          - docker-ci-delegate-nonprod-01
+  variables:
+    - name: sonar
+      type: Secret
+      description: SonarQube access token
+      required: false
+      value: sonar_token
+      identifier: UBM_SONAR_SCAN_AUDIENCE_FRONTEND
+      "--name": UBM Sonar Scan Audience Frontend
+  notificationRules:
+    - name: UBM_SONAR_SCAN_STATUS
+      identifier: UBM_SONAR_SCAN_STATUS
+      pipelineEvents:
+        - type: PipelineFailed
+        - type: PipelineSuccess
+        - type: StageFailed
+          forStages:
+            - AllStages
+        - type: StepFailed
+      notificationMethod:
+        type: Email
+        spec:
+          userGroups: []
+          recipients:
+            - <+trigger.payload.parameters.email>
+      enabled: true
